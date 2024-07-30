@@ -46,24 +46,88 @@ def predict_Z(lx, ly, lz):
     return y_pred_original.tolist()
 
 def predict_force(lx, ly, lz):
-    loaded_model = tf.keras.models.load_model('./data_from_backend/force/keras/Force.keras')
-    loaded_pca_mat = np.load('data_from_backend/force/pca/pca_mat_force.npy')
-    loaded_pca_mean = np.load('data_from_backend/force/pca/pca_mean_force.npy')
-    x_input = np.array([[lx, ly, lz]])
-    y_pred = loaded_model.predict(x_input)
-    y_pred = y_pred[0]
-    y_pred_original = np.dot(y_pred, loaded_pca_mat) + loaded_pca_mean
-    return y_pred_original.tolist()
+    input_dim = 3
+    output_dim = 10
+    class NeuralNetwork(nn.Module):
+        def __init__(self, input_dim, output_dim):
+            super(NeuralNetwork, self).__init__()
+            self.layer1 = nn.Linear(input_dim, 128)
+            self.layer2 = nn.Linear(128, 256)
+            self.layer3 = nn.Linear(256, 256)
+            self.layer4 = nn.Linear(256, 256)
+            self.layer5 = nn.Linear(256, 64)
+            self.output = nn.Linear(64, output_dim)
+            self.dropout = nn.Dropout(0.2)
+
+        def forward(self, x):
+            x = torch.relu(self.layer1(x))
+            x = torch.relu(self.layer2(x))
+            x = self.dropout(torch.relu(self.layer3(x)))
+            x = self.dropout(torch.relu(self.layer4(x)))
+            x = torch.relu(self.layer5(x))
+            x = self.output(x)
+            return x
+
+    model = NeuralNetwork(input_dim, output_dim)
+
+    # Load the trained model parameters
+    model.load_state_dict(torch.load('./data_from_backend/force/keras/force.pth'))
+    model.eval()
+    data = np.array([[lx, ly, lz]])
+    with torch.no_grad():  # Ensure model is in evaluation mode for inference
+        inputs = torch.tensor(data, dtype=torch.float32)
+        predictions = model(inputs)
+        loaded_pca_mat = np.load('data_from_backend/force/pca/pca_mat_force.npy')
+        loaded_pca_mean = np.load('data_from_backend/force/pca/pca_mean_force.npy')
+        predictions = predictions.numpy()
+        predictions = np.dot(predictions, loaded_pca_mat) + loaded_pca_mean
+        return predictions[0].tolist()  # Convert predictions to NumPy array if needed
 
 def predict_failure(lx, ly, lz):
-    loaded_model = tf.keras.models.load_model('./data_from_backend/Failure/keras/Failure.keras')
-    loaded_pca_mat = np.load('data_from_backend/Failure/pca/pca_mat_Failure.npy')
-    loaded_pca_mean = np.load('data_from_backend/Failure/pca/pca_mean_Failure.npy')
-    x_input = np.array([[lx, ly, lz]])
-    y_pred = loaded_model.predict(x_input)
-    y_pred = y_pred[0]
-    y_pred_original = np.dot(y_pred, loaded_pca_mat) + loaded_pca_mean
-    return y_pred_original.tolist()
+    input_dim = 3
+    output_dim = 20
+    class NeuralNetwork(nn.Module):
+        def __init__(self, input_dim, output_dim):
+            super(NeuralNetwork, self).__init__()
+            self.layers = nn.Sequential(
+                nn.Linear(input_dim, 256),
+                nn.LeakyReLU(0.01),
+                nn.BatchNorm1d(256),
+                nn.Dropout(0.2),
+                nn.Linear(256, 512),
+                nn.LeakyReLU(0.01),
+                nn.BatchNorm1d(512),
+                nn.Dropout(0.2),
+                nn.Linear(512, 512),
+                nn.LeakyReLU(0.01),
+                nn.BatchNorm1d(512),
+                nn.Dropout(0.2),
+                nn.Linear(512, 256),
+                nn.LeakyReLU(0.01),
+                nn.BatchNorm1d(256),
+                nn.Dropout(0.2),
+                nn.Linear(256, output_dim),
+                nn.LeakyReLU(0.01)
+            )
+
+        def forward(self, x):
+            return self.layers(x)   
+
+    model = NeuralNetwork(input_dim, output_dim)
+
+    # Load the trained model parameters
+    model.load_state_dict(torch.load('./data_from_backend/Failure/keras/Failure.pth'))
+    model.eval()
+    data = np.array([[lx, ly, lz]])
+    with torch.no_grad():  # Ensure model is in evaluation mode for inference
+        inputs = torch.tensor(data, dtype=torch.float32)
+        predictions = model(inputs)
+        loaded_pca_mat = np.load('data_from_backend/Failure/pca/pca_mat_Failure.npy')
+        loaded_pca_mean = np.load('data_from_backend/Failure/pca/pca_mean_Failure.npy')
+        predictions = predictions.numpy()
+        predictions = np.dot(predictions, loaded_pca_mat) + loaded_pca_mean
+        return predictions[0].tolist()  # Convert predictions to NumPy array if needed
+    
 
 def predict_Displacement(lx, ly, lz):
     input_dim = 3  
@@ -146,6 +210,18 @@ def predict_maxForce(lx, ly, lz):
         inputs = torch.tensor(data, dtype=torch.float32)
         predictions = model(inputs)
         return predictions[0].tolist()  # Convert predictions to NumPy array if needed
+
+def predict_all_val(lx, ly, lz):
+    nodal_defomation_x = predict_X(lx, ly, lz)
+    nodal_defomation_Y = predict_Y(lx, ly, lz)
+    nodal_defomation_Z = predict_Z(lx, ly, lz)
+    nodal_failure = predict_failure(lx, ly, lz)
+    force = predict_force(lx, ly, lz)
+    displacement = predict_Displacement(lx, ly, lz)
+    max_force = predict_maxForce(lx, ly, lz)
+
+    return max_force, nodal_defomation_x, nodal_defomation_Y, nodal_defomation_Z, nodal_failure, displacement, force
+
 
 def predict_all_val(lx, ly, lz):
     nodal_defomation_x = predict_X(lx, ly, lz)
